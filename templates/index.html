@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Doctor 2.0: Voice & Vision</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+        body {
+            background: linear-gradient(135deg, #e0f7fa, #b2ebf2);
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 900px;
+            width: 100%;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        h1 {
+            font-size: 2.5rem;
+            color: #00796b;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        h1 span {
+            color: #d81b60;
+        }
+        p.subtitle {
+            text-align: center;
+            font-size: 1.1rem;
+            color: #555;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        h2 {
+            font-size: 1.5rem;
+            color: #00796b;
+            margin-bottom: 15px;
+        }
+        input[type="file"], input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        input[type="file"]:focus, input[type="text"]:focus {
+            border-color: #00796b;
+            outline: none;
+        }
+        button {
+            background: #00796b;
+            color: #fff;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #004d40;
+        }
+        #image-preview {
+            max-width: 100%;
+            margin-top: 15px;
+            border-radius: 10px;
+            display: none;
+        }
+        #response {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            white-space: pre-wrap;
+        }
+        audio {
+            width: 100%;
+            margin-top: 15px;
+        }
+        .loader {
+            display: none;
+            text-align: center;
+            font-size: 1.2rem;
+            color: #00796b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧑‍⚕️<span>AI Doctor 2.0</span>🩺</h1>
+        <p class="subtitle">Your vibrant AI health assistant! 🌟</p>
+
+        <div class="section">
+            <h2>Upload Medical Image</h2>
+            <input type="file" id="image-upload" accept=".jpg,.jpeg,.png">
+            <img id="image-preview" alt="Uploaded Image">
+        </div>
+
+        <div class="section">
+            <h2>Ask a Question</h2>
+            <input type="text" id="text-input" placeholder="Type your question here...">
+            <h2>Or Upload Audio</h2>
+            <input type="file" id="audio-upload" accept=".wav,.mp3">
+            <button onclick="submit()">Submit</button>
+        </div>
+
+        <div class="section">
+            <h2>AI Response</h2>
+            <div id="response"></div>
+            <audio id="audio-player" controls></audio>
+            <div class="loader" id="loader">Processing...</div>
+        </div>
+    </div>
+
+    <script>
+        function submit() {
+            const image = document.getElementById('image-upload').files[0];
+            const text = document.getElementById('text-input').value;
+            const audio = document.getElementById('audio-upload').files[0];
+            const formData = new FormData();
+            const responseDiv = document.getElementById('response');
+            const audioPlayer = document.getElementById('audio-player');
+            const loader = document.getElementById('loader');
+
+            if (image) formData.append('image', image);
+            if (text) formData.append('text_input', text);
+            if (audio) formData.append('audio', audio);
+
+            if (!image && !text && !audio) {
+                responseDiv.innerText = "Please upload an image, type a question, or upload audio.";
+                return;
+            }
+
+            loader.style.display = 'block';
+            responseDiv.innerText = '';
+            audioPlayer.style.display = 'none';
+
+            fetch('/analyze', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                loader.style.display = 'none';
+                if (data.analysis) responseDiv.innerText += data.analysis + '\n\n';
+                if (data.transcription) responseDiv.innerText += `Transcription: ${data.transcription}\n\n`;
+                if (data.text_response) responseDiv.innerText += data.text_response + '\n\n';
+                if (data.audio_response) responseDiv.innerText += data.audio_response + '\n\n';
+                if (data.audio) {
+                    audioPlayer.src = `data:audio/mp3;base64,${data.audio}`;
+                    audioPlayer.style.display = 'block';
+                    audioPlayer.play();
+                }
+                if (image) {
+                    const preview = document.getElementById('image-preview');
+                    preview.src = URL.createObjectURL(image);
+                    preview.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                loader.style.display = 'none';
+                responseDiv.innerText = 'Error: ' + error;
+            });
+        }
+    </script>
+</body>
+</html>
