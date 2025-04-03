@@ -13,7 +13,7 @@ app = Flask(__name__)
 
 # Load environment variables
 load_dotenv()
-GROQ_API_KEY = "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"
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "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")
 
 # Initialize AI client
 groq_client = Groq(api_key=GROQ_API_KEY)
@@ -196,4 +196,6 @@ def analyze():
     return jsonify(response)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Bind to 0.0.0.0 and use PORT from environment (default 10000 on Render)
+    port = int(os.getenv("PORT", 10000))
+    app.run(host="0.0.0.0", port=port, debug=False)
