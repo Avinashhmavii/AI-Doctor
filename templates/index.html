@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Doctor 2.0: Voice & Vision</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Include Marked.js for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -94,7 +96,22 @@
             padding: 15px;
             background: #f5f5f5;
             border-radius: 10px;
-            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+        #response h1, #response h2, #response h3 {
+            color: #00796b;
+            margin-bottom: 10px;
+        }
+        #response ul {
+            list-style-type: disc;
+            margin-left: 20px;
+            margin-bottom: 10px;
+        }
+        #response p {
+            margin-bottom: 10px;
+        }
+        #response strong {
+            color: #d81b60;
         }
         audio {
             width: 100%;
@@ -150,12 +167,12 @@
             if (audio) formData.append('audio', audio);
 
             if (!image && !text && !audio) {
-                responseDiv.innerText = "Please upload an image, type a question, or upload audio.";
+                responseDiv.innerHTML = "<p>Please upload an image, type a question, or upload audio.</p>";
                 return;
             }
 
             loader.style.display = 'block';
-            responseDiv.innerText = '';
+            responseDiv.innerHTML = '';
             audioPlayer.style.display = 'none';
 
             fetch('/analyze', {
@@ -165,10 +182,13 @@
             .then(response => response.json())
             .then(data => {
                 loader.style.display = 'none';
-                if (data.analysis) responseDiv.innerText += data.analysis + '\n\n';
-                if (data.transcription) responseDiv.innerText += `Transcription: ${data.transcription}\n\n`;
-                if (data.text_response) responseDiv.innerText += data.text_response + '\n\n';
-                if (data.audio_response) responseDiv.innerText += data.audio_response + '\n\n';
+                let responseText = '';
+                if (data.analysis) responseText += data.analysis + '\n\n';
+                if (data.transcription) responseText += `Transcription: ${data.transcription}\n\n`;
+                if (data.text_response) responseText += data.text_response + '\n\n';
+                if (data.audio_response) responseText += data.audio_response + '\n\n';
+                // Render Markdown to HTML
+                responseDiv.innerHTML = marked.parse(responseText);
                 if (data.audio) {
                     audioPlayer.src = `data:audio/mp3;base64,${data.audio}`;
                     audioPlayer.style.display = 'block';
@@ -182,7 +202,7 @@
             })
             .catch(error => {
                 loader.style.display = 'none';
-                responseDiv.innerText = 'Error: ' + error;
+                responseDiv.innerHTML = '<p>Error: ' + error + '</p>';
             });
         }
     </script>
