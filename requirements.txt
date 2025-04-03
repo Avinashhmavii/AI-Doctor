@@ -1,0 +1,6 @@
+Flask
+groq
+gTTS
+speechrecognition
+pydub
+python-dotenv
