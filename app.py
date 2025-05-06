@@ -27,7 +27,7 @@ if not HF_API_KEY:
 
 # Initialize Hugging Face Inference client
 try:
-    hf_client = InferenceClient(model="llava-hf/llava-13b-hf", token=HF_API_KEY)
+    hf_client = InferenceClient(model="unsloth/Llama-3.2-11B-Vision-Instruct", token=HF_API_KEY)
 except Exception as e:
     logger.error(f"Failed to initialize Hugging Face client: {str(e)}")
     raise
