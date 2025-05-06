@@ -5,3 +5,4 @@ speechrecognition
 pydub
 python-dotenv
 gunicorn
+huggingface_hub
