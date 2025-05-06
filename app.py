@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify
 import os
 from dotenv import load_dotenv
 import base64
-from groq import Groq
+from huggingface_hub import InferenceClient
 from gtts import gTTS
 import speech_recognition as sr
 from tempfile import NamedTemporaryFile
@@ -13,10 +13,10 @@ app = Flask(__name__)
 
 # Load environment variables
 load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "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")
+HF_API_KEY = os.getenv("HF_API_KEY", "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")
 
-# Initialize AI client
-groq_client = Groq(api_key=GROQ_API_KEY)
+# Initialize Hugging Face Inference client
+hf_client = InferenceClient(model="unsloth/Llama-3.2-11B-Vision", token=HF_API_KEY)
 
 # Global state (simulating session state)
 state = {
@@ -45,12 +45,12 @@ def extract_diagnosis(analysis_result):
     return "a medical condition based on the image analysis"
 
 # Function to analyze image and voice input together
-def analyze_image_and_voice(user_query, model, encoded_image, is_initial_analysis=True):
+def analyze_image_and_voice(user_query, encoded_image, is_initial_analysis=True):
     if is_initial_analysis:
         medical_query = """
 You are a highly skilled medical imaging expert. Analyze the uploaded medical image as follows:
 
-###  Image Type & Region
+### Image Type & Region
 - Specify the type of image (e.g., CT scan, X-ray, MRI)
 - Identify the anatomical region (e.g., chest, brain) and view (e.g., axial)
 - Comment on image quality
@@ -78,32 +78,34 @@ Format your response with markdown headers and bullet points.
 You are an AI doctor. The patient has been diagnosed with {diagnosis}. The patient has asked: "{user_query}". Provide a concise, direct answer in simple language, referencing the image findings if relevant. Offer general treatment advice confidently as a doctor would.
 """
 
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": full_query},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{encoded_image}"},
-                },
-            ],
-        }
-    ]
-    chat_completion = groq_client.chat.completions.create(
-        messages=messages, model=model
+    # Prepare the payload for Hugging Face Inference API
+    response = hf_client.chat_completion(
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": full_query},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{encoded_image}"},
+                    },
+                ],
+            }
+        ],
+        max_tokens=500
     )
-    response = chat_completion.choices[0].message.content
+    response_text = response.choices[0].message.content
     if is_initial_analysis:
-        state["diagnosis"] = extract_diagnosis(response)
-    return response
+        state["diagnosis"] = extract_diagnosis(response_text)
+    return response_text
 
 # Function to generate AI response for text-only queries
 def generate_ai_response(user_query):
-    messages = [{"role": "user", "content": user_query}]
-    chat_completion = groq_client.chat.completions.create(
-        messages=messages, model="meta-llama/llama-4-scout-17b-16e-instruct"
-    return chat_completion.choices[0].message.content
+    response = hf_client.chat_completion(
+        messages=[{"role": "user", "content": user_query}],
+        max_tokens=500
+    )
+    return response.choices[0].message.content
 
 # Function to clean text for speech
 def clean_text_for_speech(text):
@@ -158,14 +160,13 @@ def index():
 def analyze():
     response = {}
     state["response_count"] += 1
-    model = "llama-3.2-90b-vision-preview"
 
     # Handle image upload
     if 'image' in request.files and request.files['image'].filename != '':
         image = request.files['image']
         state["encoded_image"] = encode_image(image)
         initial_query = "Describe the condition in this image."
-        analysis_result = analyze_image_and_voice(initial_query, model, state["encoded_image"], is_initial_analysis=True)
+        analysis_result = analyze_image_and_voice(initial_query, state["encoded_image"], is_initial_analysis=True)
         response["analysis"] = analysis_result
         response["audio"] = text_to_speech(analysis_result)
 
@@ -173,7 +174,7 @@ def analyze():
     text_input = request.form.get('text_input')
     if text_input:
         if state["encoded_image"]:
-            ai_response = analyze_image_and_voice(text_input, model, state["encoded_image"], is_initial_analysis=False)
+            ai_response = analyze_image_and_voice(text_input, state["encoded_image"], is_initial_analysis=False)
         else:
             ai_response = generate_ai_response(text_input)
         response["text_response"] = ai_response
@@ -186,7 +187,7 @@ def analyze():
         if transcribed_text:
             response["transcription"] = transcribed_text
             if state["encoded_image"]:
-                ai_response = analyze_image_and_voice(transcribed_text, model, state["encoded_image"], is_initial_analysis=False)
+                ai_response = analyze_image_and_voice(transcribed_text, state["encoded_image"], is_initial_analysis=False)
             else:
                 ai_response = generate_ai_response(transcribed_text)
             response["audio_response"] = ai_response
