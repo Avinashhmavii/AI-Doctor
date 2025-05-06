@@ -102,8 +102,7 @@ You are an AI doctor. The patient has been diagnosed with {diagnosis}. The patie
 def generate_ai_response(user_query):
     messages = [{"role": "user", "content": user_query}]
     chat_completion = groq_client.chat.completions.create(
-        messages=messages, model="llama-3.2-90b-vision-preview"
-    )
+        messages=messages, model="meta-llama/llama-4-scout-17b-16e-instruct"
     return chat_completion.choices[0].message.content
 
 # Function to clean text for speech
