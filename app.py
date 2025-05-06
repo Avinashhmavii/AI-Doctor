@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify
 import os
 from dotenv import load_dotenv
 import base64
-from huggingface_hub import InferenceClient
+import requests
 from gtts import gTTS
 import speech_recognition as sr
 from tempfile import NamedTemporaryFile
@@ -18,19 +18,12 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
-HF_API_KEY = os.getenv("HF_API_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # Validate API key
-if not HF_API_KEY:
-    logger.error("HF_API_KEY is not set in environment variables")
-    raise ValueError("Hugging Face API key is missing. Set HF_API_KEY in .env or environment variables.")
-
-# Initialize Hugging Face Inference client
-try:
-    hf_client = InferenceClient(model="unsloth/Llama-3.2-90B-Vision-bnb-4bit", token=HF_API_KEY)
-except Exception as e:
-    logger.error(f"Failed to initialize Hugging Face client: {str(e)}")
-    raise
+if not OPENROUTER_API_KEY:
+    logger.error("OPENROUTER_API_KEY is not set in environment variables")
+    raise ValueError("OpenRouter API key is missing. Set OPENROUTER_API_KEY in .env or environment variables.")
 
 # Global state (simulating session state)
 state = {
@@ -101,23 +94,30 @@ Format your response with markdown headers and bullet points.
 You are an AI doctor. The patient has been diagnosed with {diagnosis}. The patient has asked: "{user_query}". Provide a concise, direct answer in simple language, referencing the image findings if relevant. Offer general treatment advice confidently as a doctor would.
 """
 
-        # Prepare the payload for Hugging Face Inference API
-        response = hf_client.chat_completion(
-            messages=[
+        # Prepare the payload for OpenRouter API
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "meta-llama/llama-3.2-11b-vision-instruct:free",
+            "messages": [
                 {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": full_query},
                         {
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{encoded_image}"},
-                        },
-                    ],
+                            "image_url": {"url": f"data:image/jpeg;base64,{encoded_image}"}
+                        }
+                    ]
                 }
             ],
-            max_tokens=500
-        )
-        response_text = response.choices[0].message.content
+            "max_tokens": 500
+        }
+        response = requests.post("https://openrouter.ai/api/v1/chat/completions", json=payload, headers=headers)
+        response.raise_for_status()
+        response_text = response.json()["choices"][0]["message"]["content"]
         if is_initial_analysis:
             state["diagnosis"] = extract_diagnosis(response_text)
         return response_text
@@ -128,11 +128,18 @@ You are an AI doctor. The patient has been diagnosed with {diagnosis}. The patie
 # Function to generate AI response for text-only queries
 def generate_ai_response(user_query):
     try:
-        response = hf_client.chat_completion(
-            messages=[{"role": "user", "content": user_query}],
-            max_tokens=500
-        )
-        return response.choices[0].message.content
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "meta-llama/llama-3.2-11b-vision-instruct:free",
+            "messages": [{"role": "user", "content": user_query}],
+            "max_tokens": 500
+        }
+        response = requests.post("https://openrouter.ai/api/v1/chat/completions", json=payload, headers=headers)
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"]
     except Exception as e:
         logger.error(f"Error in generate_ai_response: {str(e)}")
         return f"Error generating response: {str(e)}"
