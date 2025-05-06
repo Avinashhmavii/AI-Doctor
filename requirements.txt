@@ -6,3 +6,4 @@ pydub
 python-dotenv
 gunicorn
 huggingface_hub
+requests
