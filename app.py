@@ -10,6 +10,9 @@ from tempfile import NamedTemporaryFile
 import re
 from pydub import AudioSegment
 import logging
+from PIL import Image
+import io
+import time
 
 app = Flask(__name__)
 
@@ -33,10 +36,20 @@ state = {
     "encoded_image": None
 }
 
-# Function to encode image to base64
+# Function to resize and encode image to base64
 def encode_image(image):
     try:
-        return base64.b64encode(image.read()).decode('utf-8')
+        # Open image with PIL
+        img = Image.open(image)
+        # Resize image to max 800x800 while maintaining aspect ratio
+        img.thumbnail((800, 800), Image.Resampling.LANCZOS)
+        # Convert to JPEG
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=85)
+        # Encode to base64
+        encoded = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        logger.info(f"Encoded image size: {len(encoded)} bytes")
+        return encoded
     except Exception as e:
         logger.error(f"Error encoding image: {str(e)}")
         return None
@@ -95,11 +108,11 @@ Format your response with markdown headers and bullet points.
 You are an AI doctor. The patient has been diagnosed with {diagnosis}. The patient has asked: "{user_query}". Provide a concise, direct answer in simple language, referencing the image findings if relevant. Offer general treatment advice confidently as a doctor would.
 """
 
-        # Prepare the payload for OpenRouter API (based on reference code)
+        # Prepare the payload for OpenRouter API
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost:10000",  # Match app's default port
+            "HTTP-Referer": "https://ai-doctor-me7g.onrender.com",
             "X-Title": "Medical Image Analysis App"
         }
         payload = {
@@ -118,11 +131,15 @@ You are an AI doctor. The patient has been diagnosed with {diagnosis}. The patie
             ],
             "max_tokens": 500
         }
+        start_time = time.time()
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers=headers,
-            data=json.dumps(payload)
+            data=json.dumps(payload),
+            timeout=60  # Increased timeout to 60 seconds
         )
+        response_time = time.time() - start_time
+        logger.info(f"OpenRouter API request took {response_time:.2f} seconds")
 
         # Check Content-Type before parsing
         content_type = response.headers.get("Content-Type", "")
@@ -132,7 +149,7 @@ You are an AI doctor. The patient has been diagnosed with {diagnosis}. The patie
 
         response_json = response.json()
 
-        # Log the raw response for debugging
+        # Log the raw response
         logger.info(f"OpenRouter API response: {response_json}")
 
         # Handle common HTTP status codes
@@ -160,6 +177,9 @@ You are an AI doctor. The patient has been diagnosed with {diagnosis}. The patie
         if is_initial_analysis:
             state["diagnosis"] = extract_diagnosis(response_text)
         return response_text
+    except requests.exceptions.Timeout:
+        logger.error("Request to OpenRouter API timed out")
+        return "Error: OpenRouter API request timed out. Please try again later."
     except requests.exceptions.HTTPError as e:
         logger.error(f"HTTP error in OpenRouter API request: {str(e)} - Response: {response.text[:500] if 'response' in locals() else 'No response'}")
         return f"Error: HTTP error from OpenRouter API - {str(e)}"
@@ -179,7 +199,7 @@ def generate_ai_response(user_query):
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost:10000",
+            "HTTP-Referer": "https://ai-doctor-me7g.onrender.com",
             "X-Title": "Medical Image Analysis App"
         }
         payload = {
@@ -189,11 +209,15 @@ def generate_ai_response(user_query):
             ],
             "max_tokens": 500
         }
+        start_time = time.time()
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers=headers,
-            data=json.dumps(payload)
+            data=json.dumps(payload),
+            timeout=60  # Increased timeout to 60 seconds
         )
+        response_time = time.time() - start_time
+        logger.info(f"OpenRouter API request took {response_time:.2f} seconds")
 
         # Check Content-Type before parsing
         content_type = response.headers.get("Content-Type", "")
@@ -203,7 +227,7 @@ def generate_ai_response(user_query):
 
         response_json = response.json()
 
-        # Log the raw response for debugging
+        # Log the raw response
         logger.info(f"OpenRouter API response: {response_json}")
 
         # Handle common HTTP status codes
@@ -227,6 +251,9 @@ def generate_ai_response(user_query):
             return "Error: Invalid response from OpenRouter API (missing message or content)"
 
         return response_json["choices"][0]["message"]["content"]
+    except requests.exceptions.Timeout:
+        logger.error("Request to OpenRouter API timed out")
+        return "Error: OpenRouter API request timed out. Please try again later."
     except requests.exceptions.HTTPError as e:
         logger.error(f"HTTP error in OpenRouter API request: {str(e)} - Response: {response.text[:500] if 'response' in locals() else 'No response'}")
         return f"Error: HTTP error from OpenRouter API - {str(e)}"
