@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 import base64
 import requests
+import json
 from gtts import gTTS
 import speech_recognition as sr
 from tempfile import NamedTemporaryFile
@@ -94,12 +95,12 @@ Format your response with markdown headers and bullet points.
 You are an AI doctor. The patient has been diagnosed with {diagnosis}. The patient has asked: "{user_query}". Provide a concise, direct answer in simple language, referencing the image findings if relevant. Offer general treatment advice confidently as a doctor would.
 """
 
-        # Prepare the payload for OpenRouter API
+        # Prepare the payload for OpenRouter API (based on reference code)
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost",  # Required by OpenRouter for free tier
-            "X-Title": "Medical Image Analysis App"  # Required by OpenRouter for free tier
+            "HTTP-Referer": "http://localhost:10000",  # Match app's default port
+            "X-Title": "Medical Image Analysis App"
         }
         payload = {
             "model": "meta-llama/llama-3.2-11b-vision-instruct:free",
@@ -117,12 +118,33 @@ You are an AI doctor. The patient has been diagnosed with {diagnosis}. The patie
             ],
             "max_tokens": 500
         }
-        response = requests.post("https://openrouter.ai/api/v1/chat/completions", json=payload, headers=headers)
-        response.raise_for_status()
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            data=json.dumps(payload)
+        )
+
+        # Check Content-Type before parsing
+        content_type = response.headers.get("Content-Type", "")
+        if "application/json" not in content_type:
+            logger.error(f"Non-JSON response received: Content-Type={content_type}, Status={response.status_code}, Response={response.text[:500]}")
+            return f"Error: Non-JSON response from OpenRouter API (Status: {response.status_code})"
+
         response_json = response.json()
 
         # Log the raw response for debugging
         logger.info(f"OpenRouter API response: {response_json}")
+
+        # Handle common HTTP status codes
+        if response.status_code == 401:
+            logger.error("Unauthorized: Invalid or missing API key")
+            return "Error: Invalid OpenRouter API key"
+        elif response.status_code == 429:
+            logger.error("Rate limit exceeded")
+            return "Error: OpenRouter API rate limit exceeded. Please try again later."
+        elif response.status_code != 200:
+            logger.error(f"Unexpected status code: {response.status_code}, Response: {response_json}")
+            return f"Error: OpenRouter API returned status {response.status_code}"
 
         # Validate response structure
         if "choices" not in response_json or not isinstance(response_json["choices"], list) or not response_json["choices"]:
@@ -139,11 +161,14 @@ You are an AI doctor. The patient has been diagnosed with {diagnosis}. The patie
             state["diagnosis"] = extract_diagnosis(response_text)
         return response_text
     except requests.exceptions.HTTPError as e:
-        logger.error(f"HTTP error in OpenRouter API request: {str(e)} - Response: {response.text if 'response' in locals() else 'No response'}")
+        logger.error(f"HTTP error in OpenRouter API request: {str(e)} - Response: {response.text[:500] if 'response' in locals() else 'No response'}")
         return f"Error: HTTP error from OpenRouter API - {str(e)}"
     except requests.exceptions.RequestException as e:
         logger.error(f"Network error in OpenRouter API request: {str(e)}")
         return f"Error: Failed to connect to OpenRouter API - {str(e)}"
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {str(e)} - Response: {response.text[:500] if 'response' in locals() else 'No response'}")
+        return f"Error: Invalid JSON response from OpenRouter API - {str(e)}"
     except Exception as e:
         logger.error(f"Unexpected error in analyze_image_and_voice: {str(e)}")
         return f"Error analyzing image and query: {str(e)}"
@@ -154,8 +179,8 @@ def generate_ai_response(user_query):
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost",  # Required by OpenRouter for free tier
-            "X-Title": "Medical Image Analysis App"  # Required by OpenRouter for free tier
+            "HTTP-Referer": "http://localhost:10000",
+            "X-Title": "Medical Image Analysis App"
         }
         payload = {
             "model": "meta-llama/llama-3.2-11b-vision-instruct:free",
@@ -164,12 +189,33 @@ def generate_ai_response(user_query):
             ],
             "max_tokens": 500
         }
-        response = requests.post("https://openrouter.ai/api/v1/chat/completions", json=payload, headers=headers)
-        response.raise_for_status()
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            data=json.dumps(payload)
+        )
+
+        # Check Content-Type before parsing
+        content_type = response.headers.get("Content-Type", "")
+        if "application/json" not in content_type:
+            logger.error(f"Non-JSON response received: Content-Type={content_type}, Status={response.status_code}, Response={response.text[:500]}")
+            return f"Error: Non-JSON response from OpenRouter API (Status: {response.status_code})"
+
         response_json = response.json()
 
         # Log the raw response for debugging
         logger.info(f"OpenRouter API response: {response_json}")
+
+        # Handle common HTTP status codes
+        if response.status_code == 401:
+            logger.error("Unauthorized: Invalid or missing API key")
+            return "Error: Invalid OpenRouter API key"
+        elif response.status_code == 429:
+            logger.error("Rate limit exceeded")
+            return "Error: OpenRouter API rate limit exceeded. Please try again later."
+        elif response.status_code != 200:
+            logger.error(f"Unexpected status code: {response.status_code}, Response: {response_json}")
+            return f"Error: OpenRouter API returned status {response.status_code}"
 
         # Validate response structure
         if "choices" not in response_json or not isinstance(response_json["choices"], list) or not response_json["choices"]:
@@ -182,11 +228,14 @@ def generate_ai_response(user_query):
 
         return response_json["choices"][0]["message"]["content"]
     except requests.exceptions.HTTPError as e:
-        logger.error(f"HTTP error in OpenRouter API request: {str(e)} - Response: {response.text if 'response' in locals() else 'No response'}")
+        logger.error(f"HTTP error in OpenRouter API request: {str(e)} - Response: {response.text[:500] if 'response' in locals() else 'No response'}")
         return f"Error: HTTP error from OpenRouter API - {str(e)}"
     except requests.exceptions.RequestException as e:
         logger.error(f"Network error in OpenRouter API request: {str(e)}")
         return f"Error: Failed to connect to OpenRouter API - {str(e)}"
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {str(e)} - Response: {response.text[:500] if 'response' in locals() else 'No response'}")
+        return f"Error: Invalid JSON response from OpenRouter API - {str(e)}"
     except Exception as e:
         logger.error(f"Unexpected error in generate_ai_response: {str(e)}")
         return f"Error generating response: {str(e)}"
